@@ -1,1 +1,370 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minh Nhựt Audio</title>
+  <style>
+    @keyframes blink {
+      0% { opacity: 1; }
+      50% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+    #clock {
+      font-family: monospace;
+      letter-spacing: 2px;
+    }
+
+    /* === RADIO STYLE === */
+    .radio-box {
+      width: 220px;
+      margin: 15px auto;
+      padding: 8px;
+      text-align: center;
+      background: linear-gradient(45deg, #ff8800, #ffcc00);
+      border-radius: 10px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+      position: relative;
+    }
+    .radio-title {
+      font-weight: bold;
+      color: red;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    .radio-btn {
+      background: #d32f2f;
+      color: #fff;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .radio-btn:hover {
+      background: #b71c1c;
+    }
+
+    /* Hiệu ứng sóng âm thanh */
+    .wave {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      gap: 3px;
+      height: 18px;
+      margin-top: 4px;
+    }
+    .wave span {
+      display: block;
+      width: 3px;
+      background: red;
+      animation: waveAnim 1s infinite ease-in-out;
+      border-radius: 2px;
+      opacity: 0.6;
+    }
+    .wave span:nth-child(1) { animation-delay: 0s; }
+    .wave span:nth-child(2) { animation-delay: 0.2s; }
+    .wave span:nth-child(3) { animation-delay: 0.4s; }
+    .wave span:nth-child(4) { animation-delay: 0.6s; }
+    .wave span:nth-child(5) { animation-delay: 0.8s; }
+
+    @keyframes waveAnim {
+      0%, 100% { height: 4px; }
+      50% { height: 14px; }
+    }
+    .radio-box:not(.playing) .wave {
+      opacity: 0;
+    }
+  </style>
+  <script>
+    function detectDevice() {
+      let ua = navigator.userAgent;
+      let os = "Không xác định";
+      let device = "Không rõ thiết bị";
+
+      if (/iPhone/i.test(ua)) {
+          os = "iOS";
+          let version = ua.match(/OS (\d+_\d+(?:_\d+)?)/i);
+          if (version) os += " " + version[1].replace(/_/g, ".");
+          device = "iPhone";
+      } 
+      else if (/iPad/i.test(ua)) {
+          os = "iPadOS";
+          device = "iPad";
+      }
+      else if (/Android/i.test(ua)) {
+          let version = ua.match(/Android\s([0-9\.]+)/i);
+          os = version ? "Android " + version[1] : "Android";
+          let model = ua.match(/; ([^;]*?) Build/i);
+          device = model ? model[1].trim() : "Thiết bị Android";
+      }
+      else if (/Windows/i.test(ua)) {
+          os = "Windows"; device = "Máy tính";
+      } 
+      else if (/Mac OS X/i.test(ua)) {
+          if (navigator.maxTouchPoints > 1) { os = "iPadOS"; device = "iPad"; }
+          else { os = "macOS"; device = "MacBook / iMac"; }
+      }
+      else if (/Linux/i.test(ua)) {
+          os = "Linux"; device = "Máy tính";
+      }
+
+      document.getElementById("device-info").innerHTML = 
+          "<b>" + device + "</b> - <b>" + os + "</b>";
+    }
+    window.onload = detectDevice;
+  </script>
+</head>
+<body>
+  <!-- Thông tin thiết bị -->
+  <div id="device-info"></div>
+
+  <!-- Đồng hồ -->
+  <div style="text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 15px;">
+    <span id="clock"></span>
+  </div>
+  <script>
+    function updateClock() {
+      var now = new Date();
+      var h = now.getHours().toString().padStart(2, '0');
+      var m = now.getMinutes().toString().padStart(2, '0');
+      var s = now.getSeconds().toString().padStart(2, '0');
+      document.getElementById("clock").innerHTML =
+        `<span style="color:#00cc66;">${h}:${m}</span> <span style="color:red;">${s}</span>`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+  </script>
+
+  <!-- ✅ BÀI NHẠC THIỀN ĐƯA LÊN ĐẦU -->
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">
+      Nhạc Thiền Tĩnh Tâm An Lạc
+    </div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/g4x19yvf9fyihnhaof0dd/Nh-c-Thi-n-T-nh-T-m-An-L-c.mp3?rlkey=0gd2obiyjztbrd3tbxczatees&st=ey0vmha5" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <!-- ================= DANH SÁCH BÀI HÁT ================= -->
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">The Moment - Kenny G</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/z985zafnoqw0gd2dihijp/Kenny-G-The-Moment.mp3?rlkey=iqcxnkz4zzqf6vz2x1bjdml0e" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">Toccata - Paul Mauriat</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/4sk4a0g070suyyorxr09j/Toccata-Paul-Mauriat-YouTube.mp3?rlkey=8sqmz7kkadsibvshqay4jz4xb" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">Hungarian Sonata - Richard Clayderman</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/y3p90wdcl4c7a86sdglxl/Hungarian-Sonata-Richard-Clayderman-YouTube.mp3?rlkey=jsahwdjjo0f7x999exz13lsoh" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">Amor De Mis Amores - Paul Mauriat</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/xjdo5vv1ttoo9tndiz5n7/Amor-De-Mis-Amores-Paul-Mauriat-YouTube.mp3?rlkey=qm6s5b17r257skpttal9k0smm" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">A Comme Amour - Richard Clayderman</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/0yxe4aihys4lwu97k2fol/A-Comme-Amour-Richard-Clayderman-YouTube.mp3?rlkey=2u5nfkgoeeybtujo1f6mfp1tl" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">La Isla Bonita - Acoustic Guitar</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/ir9w2ab0f7yftwrewwr4b/LaIslaBonita-AcounticGuitar.mp3?rlkey=fzuvrgk7gkbyfmdzway8o8e5j" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">Mariage d’Amour - Richard Clayderman</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/pnvr2frh5nvrak2d536hb/Mariage-d-amour-Richard-Clayderman-YouTube.mp3?rlkey=95f6lu4ojq7lohl5p7yc3suv4" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">El Bimbo - Paul Mauriat</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/xi25dtgnl9wzte1g44qsd/El-Bimbo-Paul-Mauriat-YouTube.mp3?rlkey=ssius3glrd3k76ftveyt82phn" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <!-- === BÀI HÁT MỚI THÊM === -->
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">Lady Di - Richard Clayderman</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/cyn607rs2cy34dv706f63/Richard-Clayderman-Lady-Di-Official-Video-YouTube.mp3?rlkey=a51kgdwqewb64bsyeckxfoybo" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">Diva – Nicholas De Angeils</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/k8v0nhgp8ctoxoe4517rv/Diva-Nicholas-De-Angeils-YouTube-1.mp3?rlkey=jnuujf4hezjyc305lspgqo9bj" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <!-- ✅ Alla Figaro -->
+  <div style="text-align: center; margin-bottom: 15px;">
+    <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #333;">Alla Figaro - Paul Mauriat</div>
+    <audio controls>
+      <source src="https://dl.dropboxusercontent.com/scl/fi/lcjl7jlwj5vnxant65376/Alla-Figaro-Paul-Mauriat-YouTube.mp3?rlkey=nvlwopkxahe7zozxfibhji9sp" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <!-- ================= DANH SÁCH RADIO ================= -->
+  <div class="radio-box" id="radio-box-1">
+    <div class="radio-title">RADIO FM_99.9MHz</div>
+    <button class="radio-btn" onclick="playRadio('radio-1', 'radio-box-1', this)">▶ Nghe Radio</button>
+    <audio id="radio-1" src="https://strm.voh.com.vn/radio/channel3/playlist.m3u8"></audio>
+    <div class="wave"><span></span><span></span><span></span><span></span><span></span></div>
+  </div>
+
+  <div class="radio-box" id="radio-box-4">
+    <div class="radio-title">RADIO FM_87.7MHz</div>
+    <button class="radio-btn" onclick="playRadio('radio-4', 'radio-box-4', this)">▶ Nghe Radio</button>
+    <audio id="radio-4" src="https://strm.voh.com.vn/radio/channel5/playlist.m3u8"></audio>
+    <div class="wave"><span></span><span></span><span></span><span></span><span></span></div>
+  </div>
+
+  <div class="radio-box" id="radio-box-2">
+    <div class="radio-title">RADIO FM_95.6MHz</div>
+    <button class="radio-btn" onclick="playRadio('radio-2', 'radio-box-2', this)">▶ Nghe Radio</button>
+    <audio id="radio-2" src="https://strm.voh.com.vn/radio/channel1/playlist.m3u8"></audio>
+    <div class="wave"><span></span><span></span><span></span><span></span><span></span></div>
+  </div>
+
+  <div class="radio-box" id="radio-box-3">
+    <div class="radio-title">RADIO AM_610KHz</div>
+    <button class="radio-btn" onclick="playRadio('radio-3', 'radio-box-3', this)">▶ Nghe Radio</button>
+    <audio id="radio-3" src="https://strm.voh.com.vn/radio/channel2/playlist.m3u8"></audio>
+    <div class="wave"><span></span><span></span><span></span><span></span><span></span></div>
+  </div>
+
+  <!-- ================= Chữ nhấp nháy ================= -->
+  <div style="text-align: center; margin-top: 10px;">
+    <span style="color: red; font-size: 20px; font-weight: bold; animation: blink 1s infinite;">
+      Đặng Minh Nhựt
+    </span>
+  </div>
+
+  <!-- ================= Script autoplay playlist + radio ================= -->
+  <script>
+    const audios = document.querySelectorAll("audio:not([id^='radio'])");
+
+    audios.forEach((a, index) => {
+      a.addEventListener("play", () => {
+        audios.forEach(other => { if (other !== a) other.pause(); });
+        document.querySelectorAll("audio[id^='radio']").forEach(r => r.pause());
+      });
+
+      a.addEventListener("ended", () => {
+        if (index + 1 < audios.length) {
+          audios[index + 1].play();
+        }
+      });
+    });
+
+    function playRadio(radioId, boxId, btn) {
+      const radio = document.getElementById(radioId);
+      const radioBox = document.getElementById(boxId);
+
+      const playSym = String.fromCodePoint(0x25B6); // ▶
+      const stopSym = String.fromCodePoint(0x23F9); // ⏹
+
+      if (radio.paused) {
+        document.querySelectorAll("audio[id^='radio']").forEach(r => {
+          if (r !== radio) {
+            r.pause();
+            r.parentElement.classList.remove('playing');
+            r.previousElementSibling.textContent = playSym + " Nghe Radio";
+          }
+        });
+
+        radio.play().then(() => {
+          radioBox.classList.add('playing');
+          btn.textContent = stopSym + " Dừng Radio";
+          audios.forEach(a => a.pause());
+        }).catch(err => {
+          console.log("Không thể play radio:", err);
+          btn.textContent = playSym + " Nghe Radio";
+        });
+      } else {
+        radio.pause();
+        radioBox.classList.remove('playing');
+        btn.textContent = playSym + " Nghe Radio";
+      }
+    }
+  </script>
+</body>
+</html>
+<div class="logo-marquee">
+  <div class="marquee-track">
+    <img src="https://www.dropbox.com/scl/fi/q4508952rdljvgf8gnk2o/Logo_minhnhut.png?rlkey=7dfegpw8eick9cjiktxfrwlvl&st=wnashgtk&raw=1" alt="Logo Minh Nhựt">
+    <img src="https://www.dropbox.com/scl/fi/q4508952rdljvgf8gnk2o/Logo_minhnhut.png?rlkey=7dfegpw8eick9cjiktxfrwlvl&st=wnashgtk&raw=1" alt="Logo Minh Nhựt">
+  </div>
+</div>
+
+<style>
+.logo-marquee {
+  width: 100%;
+  height: 140px;          /* khung cao */
+  overflow: hidden;
+  background: transparent;
+  position: relative;
+}
+
+.marquee-track {
+  display: flex;
+  align-items: center;
+  /* có 2 logo → track dài gấp đôi khung */
+  animation: scrollLeft 6s linear infinite; /* 6s = tốc độ, chỉnh theo ý */
+}
+
+.marquee-track img {
+  flex: 0 0 100%;         /* mỗi logo chiếm full khung */
+  max-height: 120px;      /* chỉnh kích thước logo */
+  object-fit: contain;
+}
+
+@keyframes scrollLeft {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+</style>
+<footer style="
+  background: linear-gradient(135deg, #00c6ff, #0072ff);
+  padding: 15px 0;
+  text-align: center;
+  color: white;
+  font-family: Arial, sans-serif;
+  font-size: 14px;">
+  © 2025 Nhựt | Powered by GitHub Pages
+</footer>
+
+<script>
+  // Xóa các tham số ?utm_... hoặc ?zarsrc... trên URL
+  if (window.location.search) {
+    const cleanURL = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, document.title, cleanURL);
+  }
+</script>
 
