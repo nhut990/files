@@ -1,0 +1,481 @@
+const DEFAULT_IMAGE_URL =
+  "https://raw.githubusercontent.com/nhut990/files/refs/heads/main/hinh/logo_minhnhut.PNG";
+
+function escapeXml(str = "") {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function getFileNameWithoutExt(rawUrl) {
+  try {
+    const pathname = new URL(rawUrl).pathname;
+    const last = decodeURIComponent(pathname.split("/").pop() || "");
+    return last.replace(/\.ipa$/i, "");
+  } catch {
+    return "";
+  }
+}
+
+// Đọc chuỗi UTF-8 an toàn từ Uint8Array
+function readUtf8(bytes, start, end) {
+  return new TextDecoder("utf-8", { fatal: false }).decode(bytes.subarray(start, end));
+}
+
+function readAscii(bytes, start, end) {
+  let out = "";
+  for (let i = start; i < end; i++) {
+    out += String.fromCharCode(bytes[i]);
+  }
+  return out;
+}
+
+function readUint16LE(bytes, offset) {
+  return bytes[offset] | (bytes[offset + 1] << 8);
+}
+
+function readUint32LE(bytes, offset) {
+  return (
+    (bytes[offset] |
+      (bytes[offset + 1] << 8) |
+      (bytes[offset + 2] << 16) |
+      (bytes[offset + 3] << 24)) >>>
+    0
+  );
+}
+
+// Tải một đoạn byte bằng Range Request; nếu server không hỗ trợ Range thì fallback tải toàn bộ
+async function fetchRangeOrFull(url, start, end, fullCache) {
+  if (fullCache.bytes) {
+    return fullCache.bytes.subarray(start, Math.min(end + 1, fullCache.bytes.length));
+  }
+
+  const resp = await fetch(url, {
+    headers: { Range: `bytes=${start}-${end}` },
+  });
+
+  if (resp.status === 206) {
+    const buf = await resp.arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  if (resp.status === 200) {
+    const buf = await resp.arrayBuffer();
+    fullCache.bytes = new Uint8Array(buf);
+    return fullCache.bytes.subarray(start, Math.min(end + 1, fullCache.bytes.length));
+  }
+
+  throw new Error(`Không thể tải file .ipa (HTTP ${resp.status})`);
+}
+
+// Giải nén dữ liệu ZIP (Store = 0 hoặc Deflate = 8) bằng DecompressionStream
+async function inflateZipEntry(compressedBytes, method) {
+  if (method === 0) return compressedBytes;
+  if (method === 8) {
+    const ds = new DecompressionStream("deflate-raw");
+    const writer = ds.writable.getWriter();
+    writer.write(compressedBytes);
+    writer.close();
+    const outBuf = await new Response(ds.readable).arrayBuffer();
+    return new Uint8Array(outBuf);
+  }
+  throw new Error(`Phương thức nén ZIP không hỗ trợ: ${method}`);
+}
+
+// Parse XML plist đơn giản để lấy các key cần thiết
+function parseXmlPlist(xmlText) {
+  const result = {};
+  const dictMatch = xmlText.match(/<dict>([\s\S]*?)<\/dict>/i);
+  if (!dictMatch) return result;
+
+  const dictBody = dictMatch[1];
+  const pairRegex = /<key>([\s\S]*?)<\/key>\s*<(string|integer|real|true|false|data|date|array|dict)([\s\S]*?)<\/\2>|<(true|false)\s*\/>/gi;
+  let match;
+
+  while ((match = pairRegex.exec(dictBody)) !== null) {
+    const key = match[1]?.trim();
+    if (!key) continue;
+    const tag = (match[2] || match[4] || "").toLowerCase();
+    const rawVal = match[3] ?? "";
+
+    if (tag === "string") {
+      result[key] = rawVal
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .trim();
+    } else if (tag === "integer" || tag === "real") {
+      result[key] = rawVal.trim();
+    } else if (tag === "true") {
+      result[key] = true;
+    } else if (tag === "false") {
+      result[key] = false;
+    }
+  }
+  return result;
+}
+
+// Parse Binary Plist (bplist00) cơ bản cho dict/array/string/uid/int/bool
+function parseBinaryPlist(bytes) {
+  if (readAscii(bytes, 0, 8) !== "bplist00") {
+    throw new Error("Không phải định dạng bplist00");
+  }
+
+  const trailerOffset = bytes.length - 32;
+  if (trailerOffset < 8) throw new Error("File bplist quá ngắn");
+
+  const offsetIntSize = bytes[trailerOffset + 6];
+  const objectRefSize = bytes[trailerOffset + 7];
+  const numObjects = Number(
+    (BigInt(bytes[trailerOffset + 8]) << 56n) |
+      (BigInt(bytes[trailerOffset + 9]) << 48n) |
+      (BigInt(bytes[trailerOffset + 10]) << 40n) |
+      (BigInt(bytes[trailerOffset + 11]) << 32n) |
+      (BigInt(bytes[trailerOffset + 12]) << 24n) |
+      (BigInt(bytes[trailerOffset + 13]) << 16n) |
+      (BigInt(bytes[trailerOffset + 14]) << 8n) |
+      BigInt(bytes[trailerOffset + 15])
+  );
+  const topObject = Number(
+    (BigInt(bytes[trailerOffset + 16]) << 56n) |
+      (BigInt(bytes[trailerOffset + 17]) << 48n) |
+      (BigInt(bytes[trailerOffset + 18]) << 40n) |
+      (BigInt(bytes[trailerOffset + 19]) << 32n) |
+      (BigInt(bytes[trailerOffset + 20]) << 24n) |
+      (BigInt(bytes[trailerOffset + 21]) << 16n) |
+      (BigInt(bytes[trailerOffset + 22]) << 8n) |
+      BigInt(bytes[trailerOffset + 23])
+  );
+  const offsetTableOffset = Number(
+    (BigInt(bytes[trailerOffset + 24]) << 56n) |
+      (BigInt(bytes[trailerOffset + 25]) << 48n) |
+      (BigInt(bytes[trailerOffset + 26]) << 40n) |
+      (BigInt(bytes[trailerOffset + 27]) << 32n) |
+      (BigInt(bytes[trailerOffset + 28]) << 24n) |
+      (BigInt(bytes[trailerOffset + 29]) << 16n) |
+      (BigInt(bytes[trailerOffset + 30]) << 8n) |
+      BigInt(bytes[trailerOffset + 31])
+  );
+
+  function readBEInt(offset, size) {
+    let val = 0n;
+    for (let i = 0; i < size; i++) {
+      val = (val << 8n) | BigInt(bytes[offset + i]);
+    }
+    return Number(val);
+  }
+
+  const offsets = new Array(numObjects);
+  for (let i = 0; i < numObjects; i++) {
+    offsets[i] = readBEInt(offsetTableOffset + i * offsetIntSize, offsetIntSize);
+  }
+
+  function parseObject(objIndex, depth = 0) {
+    if (depth > 25) return null;
+    const pos = offsets[objIndex];
+    const marker = bytes[pos];
+    const type = marker & 0xf0;
+    let info = marker & 0x0f;
+    let cursor = pos + 1;
+
+    function readCount() {
+      if (info < 0x0f) return info;
+      const lenMarker = bytes[cursor++];
+      const lenSize = 1 << (lenMarker & 0x0f);
+      const count = readBEInt(cursor, lenSize);
+      cursor += lenSize;
+      return count;
+    }
+
+    switch (type) {
+      case 0x00:
+        if (info === 0x00) return null;
+        if (info === 0x08) return false;
+        if (info === 0x09) return true;
+        return null;
+      case 0x10: {
+        const byteCount = 1 << info;
+        return readBEInt(cursor, byteCount);
+      }
+      case 0x40: {
+        const len = readCount();
+        return readAscii(bytes, cursor, cursor + len);
+      }
+      case 0x50: {
+        const len = readCount();
+        return readUtf8(bytes, cursor, cursor + len);
+      }
+      case 0x60: {
+        const charCount = readCount();
+        const byteLen = charCount * 2;
+        const buf = bytes.slice(cursor, cursor + byteLen);
+        // UTF-16BE sang UTF-16LE cho TextDecoder
+        for (let i = 0; i < byteLen; i += 2) {
+          const tmp = buf[i];
+          buf[i] = buf[i + 1];
+          buf[i + 1] = tmp;
+        }
+        return new TextDecoder("utf-16le").decode(buf);
+      }
+      case 0xa0: {
+        const count = readCount();
+        const arr = [];
+        for (let i = 0; i < count; i++) {
+          const ref = readBEInt(cursor + i * objectRefSize, objectRefSize);
+          arr.push(parseObject(ref, depth + 1));
+        }
+        return arr;
+      }
+      case 0xd0: {
+        const count = readCount();
+        const dict = {};
+        const keyBase = cursor;
+        const valBase = cursor + count * objectRefSize;
+        for (let i = 0; i < count; i++) {
+          const kRef = readBEInt(keyBase + i * objectRefSize, objectRefSize);
+          const vRef = readBEInt(valBase + i * objectRefSize, objectRefSize);
+          const key = parseObject(kRef, depth + 1);
+          if (typeof key === "string") {
+            dict[key] = parseObject(vRef, depth + 1);
+          }
+        }
+        return dict;
+      }
+      default:
+        return null;
+    }
+  }
+
+  return parseObject(topObject, 0) || {};
+}
+
+function parsePlistData(plistBytes) {
+  const headAscii = readAscii(plistBytes, 0, 8);
+  if (headAscii === "bplist00") {
+    return parseBinaryPlist(plistBytes);
+  }
+  const xmlText = readUtf8(plistBytes, 0, plistBytes.length);
+  return parseXmlPlist(xmlText);
+}
+
+// Tìm entry Payload/<App>.app/Info.plist từ file .ipa (ZIP) qua Range Request
+async function extractInfoPlistFromIpa(ipaUrl) {
+  const fullCache = { bytes: null };
+
+  // Lấy kích thước file bằng HEAD trước nếu có
+  let fileSize = null;
+  try {
+    const headResp = await fetch(ipaUrl, { method: "HEAD" });
+    const cl = headResp.headers.get("content-length");
+    if (cl && /^\d+$/.test(cl)) fileSize = Number(cl);
+  } catch {
+    // Bỏ qua nếu host chặn HEAD
+  }
+
+  if (!fileSize || fileSize <= 0) {
+    const fullResp = await fetch(ipaUrl);
+    if (!fullResp.ok) throw new Error(`Không tải được .ipa (HTTP ${fullResp.status})`);
+    fullCache.bytes = new Uint8Array(await fullResp.arrayBuffer());
+    fileSize = fullCache.bytes.length;
+  }
+
+  // Đọc phần cuối tối đa 128KB để tìm End of Central Directory (EOCD: 0x06054b50)
+  const tailLen = Math.min(fileSize, 131072);
+  const tailStart = fileSize - tailLen;
+  const tailBytes = await fetchRangeOrFull(ipaUrl, tailStart, fileSize - 1, fullCache);
+
+  let eocdPos = -1;
+  for (let i = tailBytes.length - 22; i >= 0; i--) {
+    if (readUint32LE(tailBytes, i) === 0x06054b50) {
+      const commentLen = readUint16LE(tailBytes, i + 20);
+      if (i + 22 + commentLen <= tailBytes.length) {
+        eocdPos = i;
+        break;
+      }
+    }
+  }
+
+  if (eocdPos === -1) {
+    throw new Error("Không tìm thấy cấu trúc ZIP (EOCD) trong file .ipa");
+  }
+
+  const cdSize = readUint32LE(tailBytes, eocdPos + 12);
+  const cdOffset = readUint32LE(tailBytes, eocdPos + 16);
+
+  const cdBytes = await fetchRangeOrFull(
+    ipaUrl,
+    cdOffset,
+    cdOffset + cdSize - 1,
+    fullCache
+  );
+
+  let targetEntry = null;
+  let cursor = 0;
+
+  while (cursor + 46 <= cdBytes.length) {
+    if (readUint32LE(cdBytes, cursor) !== 0x02014b50) break;
+
+    const method = readUint16LE(cdBytes, cursor + 10);
+    const compressedSize = readUint32LE(cdBytes, cursor + 20);
+    const nameLen = readUint16LE(cdBytes, cursor + 28);
+    const extraLen = readUint16LE(cdBytes, cursor + 30);
+    const commentLen = readUint16LE(cdBytes, cursor + 32);
+    const localHeaderOffset = readUint32LE(cdBytes, cursor + 42);
+
+    const entryName = readUtf8(cdBytes, cursor + 46, cursor + 46 + nameLen);
+
+    // Khớp Payload/<TenApp>.app/Info.plist (không lấy file con bên trong frameworks/plugIns)
+    if (/^Payload\/[^/]+\.app\/Info\.plist$/i.test(entryName)) {
+      targetEntry = {
+        entryName,
+        method,
+        compressedSize,
+        localHeaderOffset,
+      };
+      break;
+    }
+
+    cursor += 46 + nameLen + extraLen + commentLen;
+  }
+
+  if (!targetEntry) {
+    throw new Error("Không tìm thấy Info.plist bên trong thư mục Payload/*.app");
+  }
+
+  // Đọc Local File Header (30 bytes + nameLen + extraLen) + dữ liệu nén của Info.plist
+  const lhHeader = await fetchRangeOrFull(
+    ipaUrl,
+    targetEntry.localHeaderOffset,
+    targetEntry.localHeaderOffset + 30 + 256,
+    fullCache
+  );
+
+  if (readUint32LE(lhHeader, 0) !== 0x04034b50) {
+    throw new Error("Local file header của Info.plist không hợp lệ");
+  }
+
+  const lhNameLen = readUint16LE(lhHeader, 26);
+  const lhExtraLen = readUint16LE(lhHeader, 28);
+  const dataStart = targetEntry.localHeaderOffset + 30 + lhNameLen + lhExtraLen;
+  const dataEnd = dataStart + targetEntry.compressedSize - 1;
+
+  const compressedData = await fetchRangeOrFull(ipaUrl, dataStart, dataEnd, fullCache);
+  const plistBytes = await inflateZipEntry(compressedData, targetEntry.method);
+
+  return parsePlistData(plistBytes);
+}
+
+export default {
+  async fetch(request) {
+    const { searchParams } = new URL(request.url);
+
+    // Để trống mặc định; chỉ nhận khi truyền qua URL
+    const ipaUrl = (searchParams.get("ipa") || "").trim();
+    const imageUrl =
+      (searchParams.get("image") || searchParams.get("icon") || DEFAULT_IMAGE_URL).trim();
+
+    let bundleId = (searchParams.get("bundle_id") || "").trim();
+    let version = (searchParams.get("version") || "").trim();
+    let title = (searchParams.get("title") || "").trim();
+
+    if (ipaUrl) {
+      if (!ipaUrl.startsWith("https://")) {
+        return new Response("Liên kết ipa bắt buộc phải dùng https://", {
+          status: 400,
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        });
+      }
+
+      try {
+        const info = await extractInfoPlistFromIpa(ipaUrl);
+
+        if (!bundleId) {
+          bundleId = info.CFBundleIdentifier || "";
+        }
+        if (!version) {
+          version = info.CFBundleShortVersionString || info.CFBundleVersion || "";
+        }
+        if (!title) {
+          title =
+            info.CFBundleDisplayName ||
+            info.CFBundleName ||
+            getFileNameWithoutExt(ipaUrl) ||
+            "";
+        }
+      } catch (err) {
+        // Nếu không đọc được Info.plist, vẫn giữ fallback tên file nếu title trống
+        if (!title) {
+          title = getFileNameWithoutExt(ipaUrl);
+        }
+      }
+    }
+
+    if (!imageUrl.startsWith("https://")) {
+      return new Response("Liên kết image bắt buộc phải dùng https://", {
+        status: 400,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+
+    const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>assets</key>
+			<array>
+				<dict>
+					<key>kind</key>
+					<string>software-package</string>
+					<key>url</key>
+					<string>${escapeXml(ipaUrl)}</string>
+				</dict>
+				<dict>
+					<key>kind</key>
+					<string>display-image</string>
+					<key>needs-shine</key>
+					<true/>
+					<key>url</key>
+					<string>${escapeXml(imageUrl)}</string>
+				</dict>
+				<dict>
+					<key>kind</key>
+					<string>full-size-image</string>
+					<key>needs-shine</key>
+					<true/>
+					<key>url</key>
+					<string>${escapeXml(imageUrl)}</string>
+				</dict>
+			</array>
+			<key>metadata</key>
+			<dict>
+				<key>bundle-identifier</key>
+				<string>${escapeXml(bundleId)}</string>
+				<key>bundle-version</key>
+				<string>${escapeXml(version)}</string>
+				<key>kind</key>
+				<string>software</string>
+				<key>title</key>
+				<string>${escapeXml(title)}</string>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>`;
+
+    return new Response(plistXml, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/xml; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  },
+};
